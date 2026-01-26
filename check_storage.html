@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Check LocalStorage</title>
+</head>
+<body>
+    <h1>LocalStorage Keys:</h1>
+    <ul id="keys"></ul>
+    <script>
+        const keys = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('dagboek-')) {
+                keys.push(key);
+            }
+        }
+        const ul = document.getElementById('keys');
+        keys.forEach(key => {
+            const li = document.createElement('li');
+            li.textContent = key + ': ' + (localStorage.getItem(key) ? 'EXISTS' : 'MISSING');
+            ul.appendChild(li);
+        });
+        if (keys.length === 0) {
+            ul.innerHTML = '<li>No dagboek- keys found in localStorage</li>';
+        }
+    </script>
+</body>
+</html>
