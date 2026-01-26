@@ -1,0 +1,163 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  workTasks      WorkTask[]
+  personalTasks  PersonalTask[]
+  workouts       Workout[]
+  weightEntries  WeightEntry[]
+  transactions   Transaction[]
+  notes          Note[]
+  pipelineItems  PipelineItem[]
+  projects       Project[]
+  waterIntakes   WaterIntake[]
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  color       String   @default("#6366f1")
+  userId      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user         User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workTasks    WorkTask[]
+  pipelineItems PipelineItem[]
+}
+
+model WorkTask {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  completed   Boolean   @default(false)
+  time        String    // Format: HH:MM
+  endTime     String?   // Format: HH:MM
+  projectId   String?
+  userId      String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  user    User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+}
+
+model PersonalTask {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  completed   Boolean  @default(false)
+  time        String   // Format: HH:MM
+  endTime     String?  // Format: HH:MM
+  userId      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Workout {
+  id        String   @id @default(cuid())
+  name      String
+  date      String   // Format: YYYY-MM-DD
+  time      String?  // Format: HH:MM
+  endTime   String?  // Format: HH:MM
+  exercises String[] // Array of exercise names
+  completed Boolean  @default(false)
+  userId    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model WeightEntry {
+  id        String   @id @default(cuid())
+  date      String   // Format: YYYY-MM-DD
+  weight    Float
+  userId    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Transaction {
+  id          String   @id @default(cuid())
+  type        String   // 'income' or 'expense'
+  description String
+  amount      Float
+  date        String   // Format: YYYY-MM-DD
+  category    String
+  userId      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Note {
+  id        String   @id @default(cuid())
+  content   String   @db.Text
+  userId    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PipelineItem {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  status      String   @default("todo") // 'todo' | 'in-progress' | 'review' | 'done'
+  priority    String   @default("medium") // 'low' | 'medium' | 'high'
+  projectId   String?
+  dueDate     String?  // Format: YYYY-MM-DD
+  amount      Float?
+  userId      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user    User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+}
+
+model WaterIntake {
+  id        String   @id @default(cuid())
+  date      String   // Format: YYYY-MM-DD
+  amount    Float    // in liters
+  userId    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([date, userId])
+}
