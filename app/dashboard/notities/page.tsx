@@ -32,50 +32,62 @@ export default function NotitiesPage() {
   const [newNote, setNewNote] = useState('')
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
   const [editNote, setEditNote] = useState('')
+  const [loading, setLoading] = useState(true)
 
-  // Load notes from localStorage on mount
+  // Load notes from API
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored) {
-      try {
-        const parsedNotes = JSON.parse(stored)
-        // Sort by updatedAt (most recent first)
-        const sortedNotes = parsedNotes.sort((a: Note, b: Note) => 
-          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-        )
-        setNotes(sortedNotes)
-      } catch (error) {
-        console.error('Error loading notes from localStorage:', error)
-        setNotes(defaultNotes)
-      }
-    } else {
-      setNotes(defaultNotes)
-    }
+    loadNotes()
   }, [])
 
-  // Save notes to localStorage whenever notes change
-  useEffect(() => {
-    if (notes.length > 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(notes))
-    }
-  }, [notes])
-
-  const addNote = () => {
-    if (newNote.trim()) {
-      const now = new Date().toISOString()
-      const newNoteItem: Note = {
-        id: Date.now().toString(),
-        content: newNote.trim(),
-        createdAt: now,
-        updatedAt: now,
+  const loadNotes = async () => {
+    try {
+      setLoading(true)
+      const response = await fetch('/api/notes')
+      if (response.ok) {
+        const data = await response.json()
+        setNotes(data)
       }
-      setNotes([newNoteItem, ...notes])
-      setNewNote('')
+    } catch (error) {
+      console.error('Error loading notes:', error)
+    } finally {
+      setLoading(false)
     }
   }
 
-  const deleteNote = (id: string) => {
-    setNotes(notes.filter((note) => note.id !== id))
+  const addNote = async () => {
+    if (newNote.trim()) {
+      try {
+        const response = await fetch('/api/notes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content: newNote.trim(),
+          }),
+        })
+
+        if (response.ok) {
+          const newNoteItem = await response.json()
+          setNotes([newNoteItem, ...notes])
+          setNewNote('')
+        }
+      } catch (error) {
+        console.error('Error adding note:', error)
+      }
+    }
+  }
+
+  const deleteNote = async (id: string) => {
+    try {
+      const response = await fetch(`/api/notes?id=${id}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        setNotes(notes.filter((note) => note.id !== id))
+      }
+    } catch (error) {
+      console.error('Error deleting note:', error)
+    }
   }
 
   const startEditing = (note: Note) => {
@@ -88,24 +100,32 @@ export default function NotitiesPage() {
     setEditNote('')
   }
 
-  const saveEdit = (id: string) => {
+  const saveEdit = async (id: string) => {
     if (editNote.trim()) {
-      const updatedNotes = notes.map((note) =>
-        note.id === id
-          ? {
-              ...note,
-              content: editNote.trim(),
-              updatedAt: new Date().toISOString(),
-            }
-          : note
-      )
-      // Sort by updatedAt (most recent first)
-      const sortedNotes = updatedNotes.sort((a, b) => 
-        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-      )
-      setNotes(sortedNotes)
-      setEditingNoteId(null)
-      setEditNote('')
+      try {
+        const response = await fetch('/api/notes', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id,
+            content: editNote.trim(),
+          }),
+        })
+
+        if (response.ok) {
+          const updatedNote = await response.json()
+          const updatedNotes = notes.map((n) => (n.id === id ? updatedNote : n))
+          // Sort by updatedAt (most recent first)
+          const sortedNotes = updatedNotes.sort((a, b) => 
+            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+          )
+          setNotes(sortedNotes)
+          setEditingNoteId(null)
+          setEditNote('')
+        }
+      } catch (error) {
+        console.error('Error updating note:', error)
+      }
     }
   }
 
@@ -118,6 +138,16 @@ export default function NotitiesPage() {
         addNote()
       }
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="p-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center text-luxury-dark-text-light">Laden...</div>
+        </div>
+      </div>
+    )
   }
 
   return (

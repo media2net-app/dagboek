@@ -43,36 +43,7 @@ const defaultTransactions: Transaction[] = [
 
 export default function FinancieelPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
-
-  // Load transactions from localStorage on mount
-  useEffect(() => {
-    const stored = localStorage.getItem(TRANSACTIONS_STORAGE_KEY)
-    if (stored) {
-      try {
-        const parsedTransactions = JSON.parse(stored)
-        // Migration: Update old salary amount to new amount
-        const updatedTransactions = parsedTransactions.map((transaction: Transaction) => {
-          if (transaction.id === '1' && transaction.description === 'Salaris' && transaction.amount === 3500) {
-            return { ...transaction, amount: 68150.50 }
-          }
-          return transaction
-        })
-        setTransactions(updatedTransactions)
-      } catch (error) {
-        console.error('Error loading transactions from localStorage:', error)
-        setTransactions(defaultTransactions)
-      }
-    } else {
-      setTransactions(defaultTransactions)
-    }
-  }, [])
-
-  // Save transactions to localStorage whenever they change
-  useEffect(() => {
-    if (transactions.length > 0) {
-      localStorage.setItem(TRANSACTIONS_STORAGE_KEY, JSON.stringify(transactions))
-    }
-  }, [transactions])
+  const [loading, setLoading] = useState(true)
 
   const [newTransaction, setNewTransaction] = useState({
     type: 'expense' as 'income' | 'expense',
@@ -92,28 +63,70 @@ export default function FinancieelPage() {
     'Overig',
   ]
 
-  const addTransaction = () => {
-    if (newTransaction.description.trim() && newTransaction.amount) {
-      setTransactions([
-        {
-          id: Date.now().toString(),
-          ...newTransaction,
-          amount: parseFloat(newTransaction.amount),
-        },
-        ...transactions,
-      ])
-      setNewTransaction({
-        type: 'expense',
-        description: '',
-        amount: '',
-        date: new Date().toISOString().split('T')[0],
-        category: '',
-      })
+  // Load transactions from API
+  useEffect(() => {
+    loadTransactions()
+  }, [])
+
+  const loadTransactions = async () => {
+    try {
+      setLoading(true)
+      const response = await fetch('/api/transactions')
+      if (response.ok) {
+        const data = await response.json()
+        setTransactions(data)
+      }
+    } catch (error) {
+      console.error('Error loading transactions:', error)
+    } finally {
+      setLoading(false)
     }
   }
 
-  const deleteTransaction = (id: string) => {
-    setTransactions(transactions.filter((t) => t.id !== id))
+  const addTransaction = async () => {
+    if (newTransaction.description.trim() && newTransaction.amount) {
+      try {
+        const response = await fetch('/api/transactions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: newTransaction.type,
+            description: newTransaction.description.trim(),
+            amount: parseFloat(newTransaction.amount),
+            date: newTransaction.date,
+            category: newTransaction.category,
+          }),
+        })
+
+        if (response.ok) {
+          const newTransactionItem = await response.json()
+          setTransactions([newTransactionItem, ...transactions])
+          setNewTransaction({
+            type: 'expense',
+            description: '',
+            amount: '',
+            date: new Date().toISOString().split('T')[0],
+            category: '',
+          })
+        }
+      } catch (error) {
+        console.error('Error adding transaction:', error)
+      }
+    }
+  }
+
+  const deleteTransaction = async (id: string) => {
+    try {
+      const response = await fetch(`/api/transactions?id=${id}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        setTransactions(transactions.filter((t) => t.id !== id))
+      }
+    } catch (error) {
+      console.error('Error deleting transaction:', error)
+    }
   }
 
   const totalIncome = transactions
@@ -125,6 +138,16 @@ export default function FinancieelPage() {
     .reduce((sum, t) => sum + t.amount, 0)
 
   const balance = totalIncome - totalExpenses
+
+  if (loading) {
+    return (
+      <div className="p-8">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center text-luxury-dark-text-light">Laden...</div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="p-8">

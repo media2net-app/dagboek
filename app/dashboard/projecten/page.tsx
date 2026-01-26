@@ -47,46 +47,65 @@ export default function ProjectenPage() {
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null)
   const [editProject, setEditProject] = useState({ name: '', description: '', color: '#D4AF37' })
 
-  // Load projects from localStorage on mount
+  const [loading, setLoading] = useState(true)
+
+  // Load projects from API
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored) {
-      try {
-        const parsedProjects = JSON.parse(stored)
-        setProjects(parsedProjects)
-      } catch (error) {
-        console.error('Error loading projects from localStorage:', error)
-        setProjects(defaultProjects)
-      }
-    } else {
-      setProjects(defaultProjects)
-    }
+    loadProjects()
   }, [])
 
-  // Save projects to localStorage whenever projects change
-  useEffect(() => {
-    if (projects.length > 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(projects))
-    }
-  }, [projects])
-
-  const addProject = () => {
-    if (newProject.name.trim()) {
-      const newProjectItem: Project = {
-        id: Date.now().toString(),
-        name: newProject.name.trim(),
-        description: newProject.description.trim(),
-        color: newProject.color,
-        createdAt: new Date().toISOString(),
+  const loadProjects = async () => {
+    try {
+      setLoading(true)
+      const response = await fetch('/api/projects')
+      if (response.ok) {
+        const data = await response.json()
+        setProjects(data)
       }
-      setProjects([...projects, newProjectItem])
-      setNewProject({ name: '', description: '', color: '#D4AF37' })
+    } catch (error) {
+      console.error('Error loading projects:', error)
+    } finally {
+      setLoading(false)
     }
   }
 
-  const deleteProject = (id: string) => {
+  const addProject = async () => {
+    if (newProject.name.trim()) {
+      try {
+        const response = await fetch('/api/projects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: newProject.name.trim(),
+            description: newProject.description.trim() || null,
+            color: newProject.color,
+          }),
+        })
+
+        if (response.ok) {
+          const newProjectItem = await response.json()
+          setProjects([...projects, newProjectItem])
+          setNewProject({ name: '', description: '', color: '#D4AF37' })
+        }
+      } catch (error) {
+        console.error('Error adding project:', error)
+      }
+    }
+  }
+
+  const deleteProject = async (id: string) => {
     if (confirm('Weet je zeker dat je dit project wilt verwijderen? Taken die aan dit project gekoppeld zijn blijven behouden.')) {
-      setProjects(projects.filter((project) => project.id !== id))
+      try {
+        const response = await fetch(`/api/projects?id=${id}`, {
+          method: 'DELETE',
+        })
+
+        if (response.ok) {
+          setProjects(projects.filter((project) => project.id !== id))
+        }
+      } catch (error) {
+        console.error('Error deleting project:', error)
+      }
     }
   }
 
@@ -104,22 +123,40 @@ export default function ProjectenPage() {
     setEditProject({ name: '', description: '', color: '#D4AF37' })
   }
 
-  const saveEdit = (id: string) => {
+  const saveEdit = async (id: string) => {
     if (editProject.name.trim()) {
-      const updatedProjects = projects.map((project) =>
-        project.id === id
-          ? {
-              ...project,
-              name: editProject.name.trim(),
-              description: editProject.description.trim(),
-              color: editProject.color,
-            }
-          : project
-      )
-      setProjects(updatedProjects)
-      setEditingProjectId(null)
-      setEditProject({ name: '', description: '', color: '#D4AF37' })
+      try {
+        const response = await fetch('/api/projects', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id,
+            name: editProject.name.trim(),
+            description: editProject.description.trim() || null,
+            color: editProject.color,
+          }),
+        })
+
+        if (response.ok) {
+          const updatedProject = await response.json()
+          setProjects(projects.map((p) => (p.id === id ? updatedProject : p)))
+          setEditingProjectId(null)
+          setEditProject({ name: '', description: '', color: '#D4AF37' })
+        }
+      } catch (error) {
+        console.error('Error updating project:', error)
+      }
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="p-8">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center text-luxury-dark-text-light">Laden...</div>
+        </div>
+      </div>
+    )
   }
 
   return (

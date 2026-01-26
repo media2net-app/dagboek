@@ -11,6 +11,11 @@ interface Task {
   time: string
   endTime?: string
   projectId?: string
+  project?: {
+    id: string
+    name: string
+    color: string
+  }
 }
 
 interface Project {
@@ -20,32 +25,6 @@ interface Project {
   color: string
   createdAt: string
 }
-
-const STORAGE_KEY = 'dagboek-werk-tasks'
-
-const defaultTasks: Task[] = [
-  {
-    id: '1',
-    title: 'Project planning review',
-    description: 'Review van Q1 project planning',
-    completed: false,
-    time: '09:00',
-  },
-  {
-    id: '2',
-    title: 'Team meeting',
-    description: 'Wekelijkse standup met het team',
-    completed: false,
-    time: '10:30',
-  },
-  {
-    id: '3',
-    title: 'Code review',
-    description: 'Review pull requests',
-    completed: true,
-    time: '14:00',
-  },
-]
 
 // Helper function to convert time string (HH:MM) to minutes for sorting
 const timeToMinutes = (time: string): number => {
@@ -65,75 +44,108 @@ const sortTasksByTime = (tasks: Task[]): Task[] => {
   })
 }
 
-const PROJECTS_STORAGE_KEY = 'dagboek-projecten'
-
 export default function WerkPage() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [newTask, setNewTask] = useState({ title: '', description: '', time: '', endTime: '', projectId: '' })
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
   const [editTask, setEditTask] = useState({ title: '', description: '', time: '', endTime: '', projectId: '' })
+  const [loading, setLoading] = useState(true)
 
-  // Load tasks and projects from localStorage on mount
+  // Load tasks and projects from API
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored) {
-      try {
-        const parsedTasks = JSON.parse(stored)
-        setTasks(sortTasksByTime(parsedTasks))
-      } catch (error) {
-        console.error('Error loading tasks from localStorage:', error)
-        setTasks(sortTasksByTime(defaultTasks))
-      }
-    } else {
-      setTasks(sortTasksByTime(defaultTasks))
-    }
-
-    // Load projects
-    const storedProjects = localStorage.getItem(PROJECTS_STORAGE_KEY)
-    if (storedProjects) {
-      try {
-        setProjects(JSON.parse(storedProjects))
-      } catch (error) {
-        console.error('Error loading projects:', error)
-      }
-    }
+    loadData()
   }, [])
 
-  // Save tasks to localStorage whenever tasks change
-  useEffect(() => {
-    if (tasks.length > 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks))
-    }
-  }, [tasks])
-
-  const addTask = () => {
-    if (newTask.title.trim()) {
-      const newTaskItem: Task = {
-        id: Date.now().toString(),
-        title: newTask.title,
-        description: newTask.description,
-        completed: false,
-        time: newTask.time || '00:00',
-        endTime: newTask.endTime || undefined,
-        projectId: newTask.projectId || undefined,
+  const loadData = async () => {
+    try {
+      setLoading(true)
+      // Load tasks
+      const tasksResponse = await fetch('/api/tasks?type=work')
+      if (tasksResponse.ok) {
+        const tasksData = await tasksResponse.json()
+        setTasks(sortTasksByTime(tasksData))
       }
-      const updatedTasks = [...tasks, newTaskItem]
-      setTasks(sortTasksByTime(updatedTasks))
-      setNewTask({ title: '', description: '', time: '', endTime: '', projectId: '' })
+
+      // Load projects
+      const projectsResponse = await fetch('/api/projects')
+      if (projectsResponse.ok) {
+        const projectsData = await projectsResponse.json()
+        setProjects(projectsData)
+      }
+    } catch (error) {
+      console.error('Error loading data:', error)
+    } finally {
+      setLoading(false)
     }
   }
 
-  const toggleTask = (id: string) => {
-    const updatedTasks = tasks.map((task) =>
-      task.id === id ? { ...task, completed: !task.completed } : task
-    )
-    setTasks(sortTasksByTime(updatedTasks))
+  const addTask = async () => {
+    if (newTask.title.trim()) {
+      try {
+        const response = await fetch('/api/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'work',
+            title: newTask.title.trim(),
+            description: newTask.description.trim() || null,
+            time: newTask.time || '00:00',
+            endTime: newTask.endTime || null,
+            projectId: newTask.projectId || null,
+            completed: false,
+          }),
+        })
+
+        if (response.ok) {
+          const newTaskItem = await response.json()
+          setTasks(sortTasksByTime([...tasks, newTaskItem]))
+          setNewTask({ title: '', description: '', time: '', endTime: '', projectId: '' })
+        }
+      } catch (error) {
+        console.error('Error adding task:', error)
+      }
+    }
   }
 
-  const deleteTask = (id: string) => {
-    const updatedTasks = tasks.filter((task) => task.id !== id)
-    setTasks(sortTasksByTime(updatedTasks))
+  const toggleTask = async (id: string) => {
+    const task = tasks.find(t => t.id === id)
+    if (!task) return
+
+    try {
+      const response = await fetch('/api/tasks', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id,
+          type: 'work',
+          completed: !task.completed,
+        }),
+      })
+
+      if (response.ok) {
+        const updatedTask = await response.json()
+        const updatedTasks = tasks.map((t) => (t.id === id ? updatedTask : t))
+        setTasks(sortTasksByTime(updatedTasks))
+      }
+    } catch (error) {
+      console.error('Error updating task:', error)
+    }
+  }
+
+  const deleteTask = async (id: string) => {
+    try {
+      const response = await fetch(`/api/tasks?id=${id}&type=work`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        const updatedTasks = tasks.filter((task) => task.id !== id)
+        setTasks(sortTasksByTime(updatedTasks))
+      }
+    } catch (error) {
+      console.error('Error deleting task:', error)
+    }
   }
 
   const cancelEditing = () => {
@@ -141,23 +153,33 @@ export default function WerkPage() {
     setEditTask({ title: '', description: '', time: '', endTime: '', projectId: '' })
   }
 
-  const saveEdit = (id: string) => {
+  const saveEdit = async (id: string) => {
     if (editTask.title.trim()) {
-      const updatedTasks = tasks.map((task) =>
-        task.id === id
-          ? {
-              ...task,
-              title: editTask.title,
-              description: editTask.description,
-              time: editTask.time || '00:00',
-              endTime: editTask.endTime || undefined,
-              projectId: editTask.projectId || undefined,
-            }
-          : task
-      )
-      setTasks(sortTasksByTime(updatedTasks))
-      setEditingTaskId(null)
-      setEditTask({ title: '', description: '', time: '', endTime: '', projectId: '' })
+      try {
+        const response = await fetch('/api/tasks', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id,
+            type: 'work',
+            title: editTask.title.trim(),
+            description: editTask.description.trim() || null,
+            time: editTask.time || '00:00',
+            endTime: editTask.endTime || null,
+            projectId: editTask.projectId || null,
+          }),
+        })
+
+        if (response.ok) {
+          const updatedTask = await response.json()
+          const updatedTasks = tasks.map((t) => (t.id === id ? updatedTask : t))
+          setTasks(sortTasksByTime(updatedTasks))
+          setEditingTaskId(null)
+          setEditTask({ title: '', description: '', time: '', endTime: '', projectId: '' })
+        }
+      } catch (error) {
+        console.error('Error updating task:', error)
+      }
     }
   }
 
@@ -175,6 +197,16 @@ export default function WerkPage() {
       endTime: task.endTime || '',
       projectId: task.projectId || '',
     })
+  }
+
+  if (loading) {
+    return (
+      <div className="p-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center text-luxury-dark-text-light">Laden...</div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -376,8 +408,8 @@ export default function WerkPage() {
                     <div className="flex-1">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
-                          {task.projectId && (() => {
-                            const project = getProjectById(task.projectId)
+                          {(task.projectId || task.project) && (() => {
+                            const project = task.project || getProjectById(task.projectId)
                             return project ? (
                               <div
                                 className="w-3 h-3 rounded flex-shrink-0"
@@ -405,8 +437,8 @@ export default function WerkPage() {
                           {task.description}
                         </p>
                       )}
-                      {task.projectId && (() => {
-                        const project = getProjectById(task.projectId)
+                      {(task.projectId || task.project) && (() => {
+                        const project = task.project || getProjectById(task.projectId)
                         return project ? (
                           <p className="text-xs text-luxury-dark-text-light mt-1">
                             Project: {project.name}

@@ -12,27 +12,6 @@ interface PersonalTask {
   endTime?: string
 }
 
-const STORAGE_KEY = 'dagboek-persoonlijk-tasks'
-
-const defaultTasks: PersonalTask[] = [
-  {
-    id: '1',
-    title: 'Boodschappen doen',
-    description: 'Wekelijkse boodschappen',
-    completed: false,
-    time: '10:00',
-    endTime: '11:00',
-  },
-  {
-    id: '2',
-    title: 'Afspraak dokter',
-    description: 'Controle afspraak',
-    completed: false,
-    time: '14:00',
-    endTime: '14:30',
-  },
-]
-
 // Helper function to convert time string (HH:MM) to minutes for sorting
 const timeToMinutes = (time: string): number => {
   const [hours, minutes] = time.split(':').map(Number)
@@ -56,56 +35,93 @@ export default function PersoonlijkPage() {
   const [newTask, setNewTask] = useState({ title: '', description: '', time: '', endTime: '' })
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
   const [editTask, setEditTask] = useState({ title: '', description: '', time: '', endTime: '' })
+  const [loading, setLoading] = useState(true)
 
-  // Load tasks from localStorage on mount
+  // Load tasks from API
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored) {
-      try {
-        const parsedTasks = JSON.parse(stored)
-        setTasks(sortTasksByTime(parsedTasks))
-      } catch (error) {
-        console.error('Error loading tasks from localStorage:', error)
-        setTasks(sortTasksByTime(defaultTasks))
-      }
-    } else {
-      setTasks(sortTasksByTime(defaultTasks))
-    }
+    loadTasks()
   }, [])
 
-  // Save tasks to localStorage whenever tasks change
-  useEffect(() => {
-    if (tasks.length > 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks))
-    }
-  }, [tasks])
-
-  const addTask = () => {
-    if (newTask.title.trim()) {
-      const newTaskItem: PersonalTask = {
-        id: Date.now().toString(),
-        title: newTask.title,
-        description: newTask.description,
-        completed: false,
-        time: newTask.time || '00:00',
-        endTime: newTask.endTime || undefined,
+  const loadTasks = async () => {
+    try {
+      setLoading(true)
+      const response = await fetch('/api/tasks?type=personal')
+      if (response.ok) {
+        const data = await response.json()
+        setTasks(sortTasksByTime(data))
       }
-      const updatedTasks = [...tasks, newTaskItem]
-      setTasks(sortTasksByTime(updatedTasks))
-      setNewTask({ title: '', description: '', time: '', endTime: '' })
+    } catch (error) {
+      console.error('Error loading tasks:', error)
+    } finally {
+      setLoading(false)
     }
   }
 
-  const toggleTask = (id: string) => {
-    const updatedTasks = tasks.map((task) =>
-      task.id === id ? { ...task, completed: !task.completed } : task
-    )
-    setTasks(sortTasksByTime(updatedTasks))
+  const addTask = async () => {
+    if (newTask.title.trim()) {
+      try {
+        const response = await fetch('/api/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'personal',
+            title: newTask.title.trim(),
+            description: newTask.description.trim() || null,
+            time: newTask.time || '00:00',
+            endTime: newTask.endTime || null,
+            completed: false,
+          }),
+        })
+
+        if (response.ok) {
+          const newTaskItem = await response.json()
+          setTasks(sortTasksByTime([...tasks, newTaskItem]))
+          setNewTask({ title: '', description: '', time: '', endTime: '' })
+        }
+      } catch (error) {
+        console.error('Error adding task:', error)
+      }
+    }
   }
 
-  const deleteTask = (id: string) => {
-    const updatedTasks = tasks.filter((task) => task.id !== id)
-    setTasks(sortTasksByTime(updatedTasks))
+  const toggleTask = async (id: string) => {
+    const task = tasks.find(t => t.id === id)
+    if (!task) return
+
+    try {
+      const response = await fetch('/api/tasks', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id,
+          type: 'personal',
+          completed: !task.completed,
+        }),
+      })
+
+      if (response.ok) {
+        const updatedTask = await response.json()
+        const updatedTasks = tasks.map((t) => (t.id === id ? updatedTask : t))
+        setTasks(sortTasksByTime(updatedTasks))
+      }
+    } catch (error) {
+      console.error('Error updating task:', error)
+    }
+  }
+
+  const deleteTask = async (id: string) => {
+    try {
+      const response = await fetch(`/api/tasks?id=${id}&type=personal`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        const updatedTasks = tasks.filter((task) => task.id !== id)
+        setTasks(sortTasksByTime(updatedTasks))
+      }
+    } catch (error) {
+      console.error('Error deleting task:', error)
+    }
   }
 
   const startEditing = (task: PersonalTask) => {
@@ -123,23 +139,43 @@ export default function PersoonlijkPage() {
     setEditTask({ title: '', description: '', time: '', endTime: '' })
   }
 
-  const saveEdit = (id: string) => {
+  const saveEdit = async (id: string) => {
     if (editTask.title.trim()) {
-      const updatedTasks = tasks.map((task) =>
-        task.id === id
-          ? {
-              ...task,
-              title: editTask.title,
-              description: editTask.description,
-              time: editTask.time || '00:00',
-              endTime: editTask.endTime || undefined,
-            }
-          : task
-      )
-      setTasks(sortTasksByTime(updatedTasks))
-      setEditingTaskId(null)
-      setEditTask({ title: '', description: '', time: '', endTime: '' })
+      try {
+        const response = await fetch('/api/tasks', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id,
+            type: 'personal',
+            title: editTask.title.trim(),
+            description: editTask.description.trim() || null,
+            time: editTask.time || '00:00',
+            endTime: editTask.endTime || null,
+          }),
+        })
+
+        if (response.ok) {
+          const updatedTask = await response.json()
+          const updatedTasks = tasks.map((t) => (t.id === id ? updatedTask : t))
+          setTasks(sortTasksByTime(updatedTasks))
+          setEditingTaskId(null)
+          setEditTask({ title: '', description: '', time: '', endTime: '' })
+        }
+      } catch (error) {
+        console.error('Error updating task:', error)
+      }
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="p-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center text-luxury-dark-text-light">Laden...</div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -352,4 +388,3 @@ export default function PersoonlijkPage() {
     </div>
   )
 }
-

@@ -19,28 +19,6 @@ interface Workout {
   completed: boolean
 }
 
-const WEIGHT_STORAGE_KEY = 'dagboek-fitness-weights'
-const WORKOUT_STORAGE_KEY = 'dagboek-fitness-workouts'
-
-const defaultWorkouts: Workout[] = [
-  {
-    id: '1',
-    name: 'Push Day',
-    date: '2024-01-16',
-    time: '17:00',
-    exercises: ['Bench Press', 'Shoulder Press', 'Tricep Dips'],
-    completed: false,
-  },
-  {
-    id: '2',
-    name: 'Pull Day',
-    date: '2024-01-17',
-    time: '17:00',
-    exercises: ['Deadlift', 'Pull-ups', 'Rows'],
-    completed: false,
-  },
-]
-
 export default function FitnessPage() {
   const [weightEntries, setWeightEntries] = useState<WeightEntry[]>([])
   const [workouts, setWorkouts] = useState<Workout[]>([])
@@ -48,105 +26,126 @@ export default function FitnessPage() {
   const [newWorkout, setNewWorkout] = useState({ name: '', date: '', time: '', endTime: '', exercises: '' })
   const [editingWorkoutId, setEditingWorkoutId] = useState<string | null>(null)
   const [editWorkout, setEditWorkout] = useState({ name: '', date: '', time: '', endTime: '', exercises: '' })
+  const [loading, setLoading] = useState(true)
 
-  // Load data from localStorage on mount
+  // Load data from API
   useEffect(() => {
-    const storedWeights = localStorage.getItem(WEIGHT_STORAGE_KEY)
-    const storedWorkouts = localStorage.getItem(WORKOUT_STORAGE_KEY)
-
-    if (storedWeights) {
-      try {
-        const parsedWeights = JSON.parse(storedWeights)
-        setWeightEntries(parsedWeights)
-      } catch (error) {
-        console.error('Error loading weights from localStorage:', error)
-        setWeightEntries([])
-      }
-    } else {
-      setWeightEntries([])
-    }
-
-    if (storedWorkouts) {
-      try {
-        const parsedWorkouts = JSON.parse(storedWorkouts)
-        // Migration: Add default time to workouts without time
-        const migratedWorkouts = parsedWorkouts.map((workout: Workout) => {
-          if (!workout.time) {
-            return { ...workout, time: '17:00' }
-          }
-          return workout
-        })
-        setWorkouts(migratedWorkouts)
-      } catch (error) {
-        console.error('Error loading workouts from localStorage:', error)
-        setWorkouts(defaultWorkouts)
-      }
-    } else {
-      setWorkouts(defaultWorkouts)
-    }
+    loadData()
   }, [])
 
-  // Save weights to localStorage whenever they change
-  useEffect(() => {
-    if (weightEntries.length > 0) {
-      localStorage.setItem(WEIGHT_STORAGE_KEY, JSON.stringify(weightEntries))
-    }
-  }, [weightEntries])
+  const loadData = async () => {
+    try {
+      setLoading(true)
+      // Load weights
+      const weightsResponse = await fetch('/api/weights')
+      if (weightsResponse.ok) {
+        const weightsData = await weightsResponse.json()
+        setWeightEntries(weightsData)
+      }
 
-  // Save workouts to localStorage whenever they change
-  useEffect(() => {
-    if (workouts.length > 0) {
-      localStorage.setItem(WORKOUT_STORAGE_KEY, JSON.stringify(workouts))
+      // Load workouts
+      const workoutsResponse = await fetch('/api/workouts')
+      if (workoutsResponse.ok) {
+        const workoutsData = await workoutsResponse.json()
+        setWorkouts(workoutsData)
+      }
+    } catch (error) {
+      console.error('Error loading data:', error)
+    } finally {
+      setLoading(false)
     }
-  }, [workouts])
+  }
 
-  const addWeightEntry = () => {
+  const addWeightEntry = async () => {
     if (newWeight) {
-      setWeightEntries([
-        {
-          id: Date.now().toString(),
-          date: new Date().toISOString().split('T')[0],
-          weight: parseFloat(newWeight),
-        },
-        ...weightEntries,
-      ])
-      setNewWeight('')
+      try {
+        const response = await fetch('/api/weights', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            date: new Date().toISOString().split('T')[0],
+            weight: parseFloat(newWeight),
+          }),
+        })
+
+        if (response.ok) {
+          const newEntry = await response.json()
+          setWeightEntries([newEntry, ...weightEntries])
+          setNewWeight('')
+        }
+      } catch (error) {
+        console.error('Error adding weight entry:', error)
+      }
     }
   }
 
-  const deleteWeightEntry = (id: string) => {
+  const deleteWeightEntry = async (id: string) => {
     if (confirm('Weet je zeker dat je deze gewichtsregistratie wilt verwijderen?')) {
-      setWeightEntries(weightEntries.filter((entry) => entry.id !== id))
+      try {
+        const response = await fetch(`/api/weights?id=${id}`, {
+          method: 'DELETE',
+        })
+
+        if (response.ok) {
+          setWeightEntries(weightEntries.filter((entry) => entry.id !== id))
+        }
+      } catch (error) {
+        console.error('Error deleting weight entry:', error)
+      }
     }
   }
 
-  const addWorkout = () => {
+  const addWorkout = async () => {
     if (newWorkout.name.trim()) {
-      setWorkouts([
-        ...workouts,
-        {
-          id: Date.now().toString(),
-          name: newWorkout.name,
-          date: newWorkout.date || new Date().toISOString().split('T')[0],
-          time: newWorkout.time || '17:00',
-          endTime: newWorkout.endTime || undefined,
-          exercises: newWorkout.exercises
-            .split(',')
-            .map((e) => e.trim())
-            .filter((e) => e),
-          completed: false,
-        },
-      ])
-      setNewWorkout({ name: '', date: '', time: '', endTime: '', exercises: '' })
+      try {
+        const response = await fetch('/api/workouts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: newWorkout.name,
+            date: newWorkout.date || new Date().toISOString().split('T')[0],
+            time: newWorkout.time || '17:00',
+            endTime: newWorkout.endTime || null,
+            exercises: newWorkout.exercises
+              .split(',')
+              .map((e) => e.trim())
+              .filter((e) => e),
+            completed: false,
+          }),
+        })
+
+        if (response.ok) {
+          const newWorkoutItem = await response.json()
+          setWorkouts([...workouts, newWorkoutItem])
+          setNewWorkout({ name: '', date: '', time: '', endTime: '', exercises: '' })
+        }
+      } catch (error) {
+        console.error('Error adding workout:', error)
+      }
     }
   }
 
-  const toggleWorkout = (id: string) => {
-    setWorkouts(
-      workouts.map((workout) =>
-        workout.id === id ? { ...workout, completed: !workout.completed } : workout
-      )
-    )
+  const toggleWorkout = async (id: string) => {
+    const workout = workouts.find(w => w.id === id)
+    if (!workout) return
+
+    try {
+      const response = await fetch('/api/workouts', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id,
+          completed: !workout.completed,
+        }),
+      })
+
+      if (response.ok) {
+        const updatedWorkout = await response.json()
+        setWorkouts(workouts.map((w) => (w.id === id ? updatedWorkout : w)))
+      }
+    } catch (error) {
+      console.error('Error updating workout:', error)
+    }
   }
 
   const startEditing = (workout: Workout) => {
@@ -165,29 +164,56 @@ export default function FitnessPage() {
     setEditWorkout({ name: '', date: '', time: '', endTime: '', exercises: '' })
   }
 
-  const saveEdit = (id: string) => {
-    setWorkouts(
-      workouts.map((workout) =>
-        workout.id === id
-          ? {
-              ...workout,
-              name: editWorkout.name,
-              date: editWorkout.date,
-              time: editWorkout.time || undefined,
-              endTime: editWorkout.endTime || undefined,
-              exercises: editWorkout.exercises
-                .split(',')
-                .map((e) => e.trim())
-                .filter((e) => e),
-            }
-          : workout
-      )
-    )
-    cancelEditing()
+  const saveEdit = async (id: string) => {
+    try {
+      const response = await fetch('/api/workouts', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id,
+          name: editWorkout.name,
+          date: editWorkout.date,
+          time: editWorkout.time || null,
+          endTime: editWorkout.endTime || null,
+          exercises: editWorkout.exercises
+            .split(',')
+            .map((e) => e.trim())
+            .filter((e) => e),
+        }),
+      })
+
+      if (response.ok) {
+        const updatedWorkout = await response.json()
+        setWorkouts(workouts.map((w) => (w.id === id ? updatedWorkout : w)))
+        cancelEditing()
+      }
+    } catch (error) {
+      console.error('Error updating workout:', error)
+    }
   }
 
-  const deleteWorkout = (id: string) => {
-    setWorkouts(workouts.filter((workout) => workout.id !== id))
+  const deleteWorkout = async (id: string) => {
+    try {
+      const response = await fetch(`/api/workouts?id=${id}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        setWorkouts(workouts.filter((workout) => workout.id !== id))
+      }
+    } catch (error) {
+      console.error('Error deleting workout:', error)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="p-8">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center text-luxury-dark-text-light">Laden...</div>
+        </div>
+      </div>
+    )
   }
 
   return (

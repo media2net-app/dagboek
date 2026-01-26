@@ -57,64 +57,98 @@ export default function PipelinePage() {
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
   const [editItem, setEditItem] = useState<{ title: string; description: string; status: PipelineItem['status']; priority: PipelineItem['priority']; projectId: string; dueDate: string; amount: string }>({ title: '', description: '', status: 'todo', priority: 'medium', projectId: '', dueDate: '', amount: '' })
 
-  // Load items and projects from localStorage on mount
-  useEffect(() => {
-    const storedItems = localStorage.getItem(STORAGE_KEY)
-    if (storedItems) {
-      try {
-        setItems(JSON.parse(storedItems))
-      } catch (error) {
-        console.error('Error loading pipeline items:', error)
-        setItems(defaultItems)
-      }
-    } else {
-      setItems(defaultItems)
-    }
+  const [loading, setLoading] = useState(true)
 
-    // Load projects
-    const storedProjects = localStorage.getItem(PROJECTS_STORAGE_KEY)
-    if (storedProjects) {
-      try {
-        setProjects(JSON.parse(storedProjects))
-      } catch (error) {
-        console.error('Error loading projects:', error)
-      }
-    }
+  // Load items and projects from API
+  useEffect(() => {
+    loadData()
   }, [])
 
-  // Save items to localStorage whenever items change
-  useEffect(() => {
-    if (items.length > 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
-    }
-  }, [items])
-
-  const addItem = () => {
-    if (newItem.title.trim()) {
-      const newItemObj: PipelineItem = {
-        id: Date.now().toString(),
-        title: newItem.title.trim(),
-        description: newItem.description.trim(),
-        status: newItem.status,
-        priority: newItem.priority,
-        projectId: newItem.projectId || undefined,
-        dueDate: newItem.dueDate || undefined,
-        amount: newItem.amount ? parseFloat(newItem.amount) : undefined,
-        createdAt: new Date().toISOString(),
+  const loadData = async () => {
+    try {
+      setLoading(true)
+      // Load pipeline items
+      const itemsResponse = await fetch('/api/pipeline')
+      if (itemsResponse.ok) {
+        const itemsData = await itemsResponse.json()
+        setItems(itemsData)
       }
-      setItems([...items, newItemObj])
-      setNewItem({ title: '', description: '', status: 'todo', priority: 'medium', projectId: '', dueDate: '', amount: '' })
+
+      // Load projects
+      const projectsResponse = await fetch('/api/projects')
+      if (projectsResponse.ok) {
+        const projectsData = await projectsResponse.json()
+        setProjects(projectsData)
+      }
+    } catch (error) {
+      console.error('Error loading data:', error)
+    } finally {
+      setLoading(false)
     }
   }
 
-  const deleteItem = (id: string) => {
+  const addItem = async () => {
+    if (newItem.title.trim()) {
+      try {
+        const response = await fetch('/api/pipeline', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: newItem.title.trim(),
+            description: newItem.description.trim() || null,
+            status: newItem.status,
+            priority: newItem.priority,
+            projectId: newItem.projectId || null,
+            dueDate: newItem.dueDate || null,
+            amount: newItem.amount ? parseFloat(newItem.amount) : null,
+          }),
+        })
+
+        if (response.ok) {
+          const newItemObj = await response.json()
+          setItems([...items, newItemObj])
+          setNewItem({ title: '', description: '', status: 'todo', priority: 'medium', projectId: '', dueDate: '', amount: '' })
+        }
+      } catch (error) {
+        console.error('Error adding item:', error)
+      }
+    }
+  }
+
+  const deleteItem = async (id: string) => {
     if (confirm('Weet je zeker dat je dit item wilt verwijderen?')) {
-      setItems(items.filter((item) => item.id !== id))
+      try {
+        const response = await fetch(`/api/pipeline?id=${id}`, {
+          method: 'DELETE',
+        })
+
+        if (response.ok) {
+          setItems(items.filter((item) => item.id !== id))
+        }
+      } catch (error) {
+        console.error('Error deleting item:', error)
+      }
     }
   }
 
-  const moveItem = (id: string, newStatus: PipelineItem['status']) => {
-    setItems(items.map((item) => (item.id === id ? { ...item, status: newStatus } : item)))
+  const moveItem = async (id: string, newStatus: PipelineItem['status']) => {
+    try {
+      const response = await fetch('/api/pipeline', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id,
+          status: newStatus,
+        }),
+      })
+
+      if (response.ok) {
+        const updatedItem = await response.json()
+        setItems(items.map((item) => (item.id === id ? updatedItem : item)))
+      }
+    } catch (error) {
+      console.error('Error moving item:', error)
+    }
   }
 
   const startEditing = (item: PipelineItem) => {
@@ -135,25 +169,32 @@ export default function PipelinePage() {
     setEditItem({ title: '', description: '', status: 'todo', priority: 'medium', projectId: '', dueDate: '', amount: '' })
   }
 
-  const saveEdit = (id: string) => {
+  const saveEdit = async (id: string) => {
     if (editItem.title.trim()) {
-      setItems(
-        items.map((item) =>
-          item.id === id
-            ? {
-                ...item,
-                title: editItem.title.trim(),
-                description: editItem.description.trim(),
-                status: editItem.status,
-                priority: editItem.priority,
-                projectId: editItem.projectId || undefined,
-                dueDate: editItem.dueDate || undefined,
-                amount: editItem.amount ? parseFloat(editItem.amount) : undefined,
-              }
-            : item
-        )
-      )
-      cancelEditing()
+      try {
+        const response = await fetch('/api/pipeline', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id,
+            title: editItem.title.trim(),
+            description: editItem.description.trim() || null,
+            status: editItem.status,
+            priority: editItem.priority,
+            projectId: editItem.projectId || null,
+            dueDate: editItem.dueDate || null,
+            amount: editItem.amount ? parseFloat(editItem.amount) : null,
+          }),
+        })
+
+        if (response.ok) {
+          const updatedItem = await response.json()
+          setItems(items.map((item) => (item.id === id ? updatedItem : item)))
+          cancelEditing()
+        }
+      } catch (error) {
+        console.error('Error updating item:', error)
+      }
     }
   }
 
@@ -195,6 +236,16 @@ export default function PipelinePage() {
 
   const upcomingRevenue = calculateUpcomingRevenue()
   const doneRevenue = calculateDoneRevenue()
+
+  if (loading) {
+    return (
+      <div className="p-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center text-luxury-dark-text-light">Laden...</div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="p-8">

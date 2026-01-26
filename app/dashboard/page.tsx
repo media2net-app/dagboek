@@ -68,79 +68,55 @@ export default function DashboardPage() {
   const [waterIntake, setWaterIntake] = useState<WaterIntake[]>([])
   const [todayWaterIntake, setTodayWaterIntake] = useState(0)
 
-  // Load all data from localStorage
+  // Load all data from API
   useEffect(() => {
-    // Load tasks
-    const storedTasks = localStorage.getItem(STORAGE_KEYS.werk)
-    if (storedTasks) {
-      try {
-        const parsedTasks = JSON.parse(storedTasks)
-        console.log('[DEBUG] Loaded tasks from localStorage:', parsedTasks.map((t: Task) => ({ id: t.id, title: t.title, time: t.time, completed: t.completed })))
-        setTasks(parsedTasks)
-      } catch (error) {
-        console.error('Error loading tasks:', error)
+    loadAllData()
+  }, [])
+
+  const loadAllData = async () => {
+    try {
+      // Load tasks
+      const tasksResponse = await fetch('/api/tasks?type=work')
+      if (tasksResponse.ok) {
+        const tasksData = await tasksResponse.json()
+        setTasks(tasksData)
       }
-    } else {
-      console.log('[DEBUG] No tasks found in localStorage')
-    }
 
-    // Load personal tasks
-    const storedPersonalTasks = localStorage.getItem(STORAGE_KEYS.persoonlijk)
-    if (storedPersonalTasks) {
-      try {
-        setPersonalTasks(JSON.parse(storedPersonalTasks))
-      } catch (error) {
-        console.error('Error loading personal tasks:', error)
+      // Load personal tasks
+      const personalTasksResponse = await fetch('/api/tasks?type=personal')
+      if (personalTasksResponse.ok) {
+        const personalTasksData = await personalTasksResponse.json()
+        setPersonalTasks(personalTasksData)
       }
-    }
 
-    // Load workouts
-    const storedWorkouts = localStorage.getItem(STORAGE_KEYS.workouts)
-    if (storedWorkouts) {
-      try {
-        setWorkouts(JSON.parse(storedWorkouts))
-      } catch (error) {
-        console.error('Error loading workouts:', error)
+      // Load workouts
+      const workoutsResponse = await fetch('/api/workouts')
+      if (workoutsResponse.ok) {
+        const workoutsData = await workoutsResponse.json()
+        setWorkouts(workoutsData)
       }
-    }
 
-    // Load transactions
-    const storedTransactions = localStorage.getItem(STORAGE_KEYS.transactions)
-    if (storedTransactions) {
-      try {
-        const parsedTransactions = JSON.parse(storedTransactions)
-        // Migration: Update old salary amount to new amount
-        const updatedTransactions = parsedTransactions.map((transaction: Transaction) => {
-          if (transaction.id === '1' && transaction.description === 'Salaris' && transaction.amount === 3500) {
-            return { ...transaction, amount: 68150.50 }
-          }
-          return transaction
-        })
-        setTransactions(updatedTransactions)
-        // Save updated transactions back to localStorage
-        localStorage.setItem(STORAGE_KEYS.transactions, JSON.stringify(updatedTransactions))
-      } catch (error) {
-        console.error('Error loading transactions:', error)
+      // Load transactions
+      const transactionsResponse = await fetch('/api/transactions')
+      if (transactionsResponse.ok) {
+        const transactionsData = await transactionsResponse.json()
+        setTransactions(transactionsData)
       }
-    }
 
-    // Don't load financials lock state - always start locked
-
-    // Load water intake
-    const storedWaterIntake = localStorage.getItem(STORAGE_KEYS.waterIntake)
-    if (storedWaterIntake) {
-      try {
-        const parsedWaterIntake = JSON.parse(storedWaterIntake)
-        setWaterIntake(parsedWaterIntake)
+      // Load water intake
+      const waterResponse = await fetch('/api/water')
+      if (waterResponse.ok) {
+        const waterData = await waterResponse.json()
+        setWaterIntake(waterData)
         // Calculate today's water intake
         const today = new Date().toISOString().split('T')[0]
-        const todayEntry = parsedWaterIntake.find((entry: WaterIntake) => entry.date === today)
+        const todayEntry = waterData.find((entry: WaterIntake) => entry.date === today)
         setTodayWaterIntake(todayEntry ? todayEntry.amount : 0)
-      } catch (error) {
-        console.error('Error loading water intake:', error)
       }
+    } catch (error) {
+      console.error('Error loading data:', error)
     }
-  }, [])
+  }
 
   // Update current time every second (Bucharest timezone)
   useEffect(() => {
@@ -462,20 +438,31 @@ export default function DashboardPage() {
   }
 
   // Add water intake
-  const addWaterIntake = (amount: number) => {
+  const addWaterIntake = async (amount: number) => {
     const today = new Date().toISOString().split('T')[0]
-    const updatedIntake = [...waterIntake]
-    const todayIndex = updatedIntake.findIndex((entry) => entry.date === today)
+    const currentEntry = waterIntake.find((entry) => entry.date === today)
+    const newAmount = currentEntry ? currentEntry.amount + amount : amount
     
-    if (todayIndex >= 0) {
-      updatedIntake[todayIndex].amount += amount
-    } else {
-      updatedIntake.push({ date: today, amount })
+    try {
+      const response = await fetch('/api/water', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: today,
+          amount: newAmount,
+        }),
+      })
+
+      if (response.ok) {
+        const updatedEntry = await response.json()
+        const updatedIntake = waterIntake.filter((entry) => entry.date !== today)
+        updatedIntake.push(updatedEntry)
+        setWaterIntake(updatedIntake)
+        setTodayWaterIntake(updatedEntry.amount)
+      }
+    } catch (error) {
+      console.error('Error updating water intake:', error)
     }
-    
-    setWaterIntake(updatedIntake)
-    setTodayWaterIntake(updatedIntake.find((entry) => entry.date === today)?.amount || 0)
-    localStorage.setItem(STORAGE_KEYS.waterIntake, JSON.stringify(updatedIntake))
   }
 
   const waterGoal = 4 // liters per day
