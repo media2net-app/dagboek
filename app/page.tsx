@@ -88,6 +88,57 @@ export default function LoginPage() {
     return ((year % 4 === 0 && year % 100 !== 0) || year % 400 === 0) ? 366 : 365
   }
 
+  // Auto fullscreen on page load
+  useEffect(() => {
+    const requestFullscreen = async () => {
+      try {
+        const doc = document.documentElement
+        if (doc.requestFullscreen) {
+          await doc.requestFullscreen()
+        } else if ((doc as any).webkitRequestFullscreen) {
+          // Safari
+          await (doc as any).webkitRequestFullscreen()
+        } else if ((doc as any).mozRequestFullScreen) {
+          // Firefox
+          await (doc as any).mozRequestFullScreen()
+        } else if ((doc as any).msRequestFullscreen) {
+          // IE/Edge
+          await (doc as any).msRequestFullscreen()
+        }
+      } catch (error) {
+        // Fullscreen failed (usually requires user interaction)
+        // Try again on first user interaction
+        const handleFirstInteraction = async () => {
+          try {
+            const doc = document.documentElement
+            if (doc.requestFullscreen) {
+              await doc.requestFullscreen()
+            } else if ((doc as any).webkitRequestFullscreen) {
+              await (doc as any).webkitRequestFullscreen()
+            } else if ((doc as any).mozRequestFullScreen) {
+              await (doc as any).mozRequestFullScreen()
+            } else if ((doc as any).msRequestFullscreen) {
+              await (doc as any).msRequestFullscreen()
+            }
+          } catch (err) {
+            // Silently fail
+          }
+          // Remove listeners after first attempt
+          document.removeEventListener('click', handleFirstInteraction)
+          document.removeEventListener('keydown', handleFirstInteraction)
+          document.removeEventListener('touchstart', handleFirstInteraction)
+        }
+        
+        // Listen for first user interaction
+        document.addEventListener('click', handleFirstInteraction, { once: true })
+        document.addEventListener('keydown', handleFirstInteraction, { once: true })
+        document.addEventListener('touchstart', handleFirstInteraction, { once: true })
+      }
+    }
+
+    requestFullscreen()
+  }, [])
+
   // Update time and date
   useEffect(() => {
     const updateTime = () => {
@@ -144,15 +195,9 @@ export default function LoginPage() {
           badge="High performance dashboard"
           title1={getGreeting()}
           title2="Chiel"
-        />
-      </div>
-
-      {/* Main content - always visible, positioned below the HeroGeometric text */}
-      <div className="relative z-20 flex items-end justify-center min-h-screen w-full px-6 pb-32 md:pb-40">
-        <div className="w-full max-w-md">
+        >
           {!showLogin ? (
-            /* Welcome screen - all in one card */
-            <div className="bg-black/40 backdrop-blur-xl rounded-lg shadow-2xl border border-white/10 p-8 space-y-6 text-center">
+            <div className="space-y-6 text-center mt-8">
               {/* Time and date section */}
               <div className="space-y-2 pb-4 border-b border-white/10">
                 <div className="flex items-center justify-center gap-2 text-luxury-gold">
@@ -168,26 +213,29 @@ export default function LoginPage() {
               </div>
 
               {/* Daily Motivation Quote */}
-              <div className="bg-gradient-to-r from-luxury-gold/20 to-luxury-gold/10 rounded-lg border border-luxury-gold/30 p-4">
-                <div className="flex items-start gap-3">
-                  <div className="flex-shrink-0 mt-1">
-                    <Sparkles className="w-5 h-5 text-luxury-gold" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-base font-medium text-white/90 italic">
-                      "{dailyQuote}"
-                    </p>
-                    <p className="text-xs text-white/60 mt-1">
-                      Dagelijkse motivatie
-                    </p>
-                  </div>
-                </div>
+              <div className="text-center">
+                <p className="text-xl md:text-2xl font-medium text-white/90 italic">
+                  "{dailyQuote}"
+                </p>
               </div>
 
               {/* Start dag button */}
               <div className="pt-2">
                 <Button
-                  onClick={() => setShowLogin(true)}
+                  onClick={() => {
+                    // Request fullscreen on user interaction (must be synchronous)
+                    const doc = document.documentElement
+                    if (doc.requestFullscreen) {
+                      doc.requestFullscreen().catch(() => {})
+                    } else if ((doc as any).webkitRequestFullscreen) {
+                      (doc as any).webkitRequestFullscreen().catch(() => {})
+                    } else if ((doc as any).mozRequestFullScreen) {
+                      (doc as any).mozRequestFullScreen().catch(() => {})
+                    } else if ((doc as any).msRequestFullscreen) {
+                      (doc as any).msRequestFullscreen().catch(() => {})
+                    }
+                    setShowLogin(true)
+                  }}
                   variant="solid"
                   size="lg"
                   neon={true}
@@ -196,7 +244,14 @@ export default function LoginPage() {
                 </Button>
               </div>
             </div>
-          ) : (
+          ) : null}
+        </HeroGeometric>
+      </div>
+
+      {/* Main content - always visible, positioned below the HeroGeometric text */}
+      <div className="relative z-20 flex items-end justify-center min-h-screen w-full px-6 pb-32 md:pb-40">
+        <div className="w-full max-w-md">
+          {showLogin ? (
             /* Login form - shown after clicking Start dag */
             <div className="bg-black/40 backdrop-blur-xl rounded-lg shadow-2xl border border-white/10 p-8 space-y-8">
               {/* Header */}
@@ -341,7 +396,7 @@ export default function LoginPage() {
               </a>
             </div>
             </div>
-          )}
+          ) : null}
         </div>
       </div>
 

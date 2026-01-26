@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { motion, useMotionValue, useTransform, animate } from "framer-motion";
 import { Circle } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -77,11 +78,13 @@ function HeroGeometric({
     title1 = "Elevate Your Digital Vision",
     title2 = "Crafting Exceptional Websites",
     description,
+    children,
 }: {
     badge?: string;
     title1?: string;
     title2?: string;
     description?: string;
+    children?: React.ReactNode;
 }) {
     const fadeUpVariants = {
         hidden: { opacity: 0, y: 30 },
@@ -173,14 +176,11 @@ function HeroGeometric({
                                 {title1}
                             </span>
                             <br />
-                            <span
-                                className={cn(
-                                    "bg-clip-text text-transparent bg-gradient-to-r from-luxury-gold via-white/90 to-white "
-                                )}
-                            >
+                            <span className="text-white">
                                 {title2}
                             </span>
                         </h1>
+                        {children}
                     </motion.div>
 
                     {description && (
